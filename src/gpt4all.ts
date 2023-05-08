@@ -1,12 +1,13 @@
-import {exec, spawn} from 'child_process';
+import child_process from 'child_process';
 import {promisify} from 'util';
 import * as fs from 'fs';
 import * as os from 'os';
 import axios from 'axios';
-import * as ProgressBar from 'progress';
+import ProgressBar from 'progress';
+import pathHelper from "path";
 
 export class GPT4All {
-    private bot: ReturnType<typeof spawn> | null = null;
+    private bot: ReturnType<typeof child_process.spawn> | null = null;
     private model: string;
     private decoderConfig: Record<string, any>;
     private executablePath: string;
@@ -32,8 +33,8 @@ Intel Mac/OSX: cd chat;./gpt4all-lora-quantized-OSX-intel
             );
         }
 
-        this.executablePath = `${os.homedir()}/.nomic/gpt4all`;
-        this.modelPath = `${os.homedir()}/.nomic/${model}.bin`; 
+        this.executablePath = pathHelper.join(os.homedir(), '.nomic', 'gpt4all-lora-quantized-win64.exe');
+        this.modelPath = pathHelper.join(os.homedir(), '.nomic', `${model}.bin`);
     }
 
     async init(forceDownload: boolean = false): Promise<void> {
@@ -61,7 +62,15 @@ Intel Mac/OSX: cd chat;./gpt4all-lora-quantized-OSX-intel
             spawnArgs.push(`--${key}`, value.toString());
         }
 
-        this.bot = spawn(spawnArgs[0], spawnArgs.slice(1), {stdio: ['pipe', 'pipe', 'ignore']});
+        var oldSpawn = child_process.spawn;
+        function mySpawn() {
+            console.log('spawn called');
+            console.log(arguments);
+            var result = oldSpawn.apply(this, arguments);
+            return result;
+        }
+        child_process.spawn = mySpawn;
+        this.bot = child_process.spawn(spawnArgs[0], spawnArgs.slice(1), {stdio: ['pipe', 'pipe', 'ignore']});
         // wait for the bot to be ready
         await new Promise((resolve) => {
             this.bot?.stdout?.on('data', (data) => {
@@ -85,7 +94,7 @@ Intel Mac/OSX: cd chat;./gpt4all-lora-quantized-OSX-intel
 
         if (platform === 'darwin') {
             // check for M1 Mac
-            const {stdout} = await promisify(exec)('uname -m');
+            const {stdout} = await promisify(child_process.exec)('uname -m');
             if (stdout.trim() === 'arm64') {
                 upstream = 'https://github.com/nomic-ai/gpt4all/blob/main/chat/gpt4all-lora-quantized-OSX-m1?raw=true';
             } else {
